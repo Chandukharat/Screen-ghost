@@ -1,0 +1,56 @@
+{
+  "name": "stealth-desk",
+  "version": "1.0.0",
+  "description": "On-screen notes overlay that stays visible locally and is excluded from screen capture.",
+  "main": "main.js",
+  "scripts": {
+    "dev": "concurrently -k \"vite\" \"wait-on tcp:5173 && electron .\"",
+    "build": "vite build",
+    "dist": "npm run build && electron-builder"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "concurrently": "^9.1.2",
+    "electron": "^28.2.0",
+    "electron-builder": "^25.1.8",
+    "vite": "^5.4.14",
+    "wait-on": "^8.0.2"
+  },
+  "build": {
+    "appId": "com.stealthdesk.app",
+    "productName": "Stealth Desk",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "dist/**/*",
+      "package.json"
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Utility"
+    }
+  }
+}
