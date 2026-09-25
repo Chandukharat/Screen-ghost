@@ -361,18 +361,31 @@ export default function App() {
   const browserActive = activeTab.id === 'browser';
 
   useEffect(() => {
-    window.electronAPI?.setOpacity(opacity / 100);
-  }, [opacity]);
-
-  useEffect(() => {
-    if (!window.electronAPI?.onToggleClickThroughHotkey) return undefined;
-    return window.electronAPI.onToggleClickThroughHotkey(() => {
+    if (!window.electronAPI) return undefined;
+    const stopOpacity = window.electronAPI.onOpacityChanged?.((value) => {
+      const percent = Math.round(Number(value) * 100);
+      if (Number.isFinite(percent)) setOpacity(percent);
+    });
+    const stopClickThrough = window.electronAPI.onClickThroughChanged?.((enabled) => {
+      setClickThrough(enabled);
+    });
+    const stopHotkey = window.electronAPI.onToggleClickThroughHotkey?.((enabled) => {
+      if (typeof enabled === 'boolean') {
+        setClickThrough(enabled);
+        return;
+      }
       setClickThrough((prev) => {
         const next = !prev;
         window.electronAPI.setClickThrough(next);
         return next;
       });
     });
+    window.electronAPI.requestWindowState?.();
+    return () => {
+      stopOpacity?.();
+      stopClickThrough?.();
+      stopHotkey?.();
+    };
   }, []);
 
   useEffect(() => {
@@ -550,7 +563,11 @@ export default function App() {
           max="100"
           step="5"
           value={opacity}
-          onChange={(event) => setOpacity(Number(event.target.value))}
+          onChange={(event) => {
+            const value = Number(event.target.value);
+            setOpacity(value);
+            window.electronAPI?.setOpacity(value / 100);
+          }}
         />
         <span className="opacity-value">{opacity}%</span>
         <button
