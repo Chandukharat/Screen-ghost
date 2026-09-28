@@ -533,6 +533,7 @@ export default function App() {
               ref={webviewRef}
               className="browser-webview"
               src={browserUrl}
+              partition="persist:stealth-browser"
               allowpopups="true"
             />
           </div>
