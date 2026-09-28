@@ -1,5 +1,69 @@
-const { app, BrowserWindow, globalShortcut, ipcMain, screen } = require('electron');
+const { app, BrowserWindow, globalShortcut, ipcMain, screen, session } = require('electron');
+const { execFileSync, spawn } = require('child_process');
 const path = require('path');
+
+const BROWSER_PARTITION = 'persist:stealth-browser';
+
+function chromeUserAgent() {
+  if (process.platform === 'win32') {
+    return 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+  }
+  if (process.platform === 'linux') {
+    return 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+  }
+  return 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+}
+
+function parentLooksLikeAShell() {
+  try {
+    const command = execFileSync('ps', ['-o', 'comm=', '-p', String(process.ppid)], { encoding: 'utf8' }).trim();
+    return /(node|npm|bash|zsh|sh|concurrently|Terminal|iTerm|Code|Cursor)/i.test(command);
+  } catch {
+    return !app.isPackaged;
+  }
+}
+
+// macOS only allows Bluetooth passkeys (the FIDO "caBLE" messages) when the app
+// was opened by Launch Services. `npm run dev` starts Electron under the terminal,
+// so Google sign-in aborts. Relaunch through `open` and keep this process alive
+// so concurrently does not stop Vite.
+function relaunchAsResponsibleMacApp() {
+  if (process.platform !== 'darwin') return false;
+  if (process.argv.includes('--stealth-responsible')) return false;
+  if (!parentLooksLikeAShell()) return false;
+
+  const appBundle = path.resolve(process.execPath, '..', '..', '..');
+  const child = spawn('/usr/bin/open', [
+    '-n',
+    appBundle,
+    '--args',
+    __dirname,
+    '--stealth-responsible',
+  ], { detached: true, stdio: 'ignore' });
+  child.unref();
+  console.log('Relaunched Stealth Desk outside the terminal so Google sign-in and Bluetooth passkeys can run.');
+  console.log('Leave this terminal open. The window belongs to the relaunched app.');
+  return true;
+}
+
+const handedOffToLaunchServices = relaunchAsResponsibleMacApp();
+
+function configureBrowserSession() {
+  const browserSession = session.fromPartition(BROWSER_PARTITION);
+  browserSession.setUserAgent(chromeUserAgent());
+}
+
+function attachGuestBrowserHandlers() {
+  app.on('web-contents-created', (_event, contents) => {
+    if (contents.getType() !== 'webview') return;
+    contents.setWindowOpenHandler(({ url }) => {
+      if (url && url !== 'about:blank') {
+        contents.loadURL(url).catch(() => {});
+      }
+      return { action: 'deny' };
+    });
+  });
+}
 
 const windowsByDisplay = new Map();
 let opacity = 0.9;
@@ -161,11 +225,16 @@ function registerHotkeys() {
   });
 }
 
+attachGuestBrowserHandlers();
+
 app.whenReady().then(() => {
+  if (handedOffToLaunchServices) return;
+
   const start = () => {
     if (process.platform === 'darwin' && app.dock) {
       app.dock.hide();
     }
+    configureBrowserSession();
     syncDisplays();
     registerHotkeys();
     screen.on('display-added', syncDisplays);
